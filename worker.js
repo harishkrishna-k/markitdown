@@ -7,6 +7,7 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const WORKER_BUILD = "v4-cobble";
 
 /* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
 const WASM_PACKAGES = [
@@ -131,7 +132,7 @@ let bootPromise = null;
 let queue = Promise.resolve();
 
 function post(message) {
-  self.postMessage(message);
+  self.postMessage({ ...message, build: WORKER_BUILD });
 }
 
 function status(message, phase = "loading") {

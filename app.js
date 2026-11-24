@@ -41,6 +41,7 @@ const elements = {
   installBtn: $("install-btn"),
   versionSha: $("version-sha"),
   versionTime: $("version-time"),
+  workerBuild: $("worker-build"),
   toast: $("toast"),
 };
 
@@ -56,6 +57,8 @@ const state = {
 let librariesPromise = null;
 let deferredInstallPrompt = null;
 let toastTimer = 0;
+let bootWatchdog = 0;
+let workerRestarts = 0;
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -153,15 +156,34 @@ async function registerServiceWorker() {
     const markOfflineReady = () => {
       if (registration.active) elements.offlineBadge.hidden = false;
     };
+    let requestedUpdate = false;
+    let reloading = false;
+    const activateWaitingWorker = () => {
+      if (!registration.waiting) return;
+      requestedUpdate = true;
+      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    };
+
     markOfflineReady();
+    activateWaitingWorker();
     registration.addEventListener("updatefound", () => {
       const installing = registration.installing;
       if (!installing) return;
       installing.addEventListener("statechange", () => {
-        if (installing.state === "installed") markOfflineReady();
+        if (installing.state === "installed") {
+          markOfflineReady();
+          activateWaitingWorker();
+        }
       });
     });
-    navigator.serviceWorker.addEventListener("controllerchange", markOfflineReady);
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      markOfflineReady();
+      if (requestedUpdate && !reloading) {
+        reloading = true;
+        window.location.reload();
+      }
+    });
+    await registration.update();
   } catch (error) {
     console.warn("Service worker registration failed:", error);
   }
@@ -215,15 +237,37 @@ function startWorker() {
   worker.addEventListener("message", (event) => onWorkerMessage(event.data));
   worker.addEventListener("error", (event) => {
     state.fatal = true;
+    clearTimeout(bootWatchdog);
     setStatus("Converter crashed", "error");
     toast(event.message || "The Python worker stopped unexpectedly.", true);
   });
+
+  clearTimeout(bootWatchdog);
+  bootWatchdog = setTimeout(() => {
+    if (state.workerReady || state.fatal) return;
+    if (workerRestarts >= 1) {
+      setStatus("Converter is taking too long to start", "error");
+      toast("The converter could not start. Reload the page to try again.", true);
+      return;
+    }
+    workerRestarts += 1;
+    toast("Restarting the converter…", true);
+    worker.terminate();
+    state.workerReady = false;
+    for (const record of state.files) {
+      if (record.status === "queued" || record.status === "converting") {
+        record.status = "queued";
+      }
+    }
+    startWorker();
+  }, 90000);
 }
 
 /* ------------------------------ worker messages ------------------------------ */
 
 function onWorkerMessage(message) {
   if (!message) return;
+  if (message.build) elements.workerBuild.textContent = message.build;
 
   switch (message.type) {
     case "status":
@@ -231,6 +275,7 @@ function onWorkerMessage(message) {
       break;
 
     case "ready":
+      clearTimeout(bootWatchdog);
       state.workerReady = true;
       setStatus("Ready", "ready");
       flushQueue();
@@ -258,6 +303,7 @@ function onWorkerMessage(message) {
       break;
 
     case "fatal":
+      clearTimeout(bootWatchdog);
       state.fatal = true;
       setStatus("Converter unavailable", "error");
       for (const record of state.files) {

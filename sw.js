@@ -4,7 +4,7 @@
  * - Cache-first for immutable Pyodide / PyPI / wheel assets (instant offline loads).
  */
 
-const CACHE_NAME = "markitdown-app-v3";
+const CACHE_NAME = "markitdown-app-v4";
 const CACHE_PREFIX = "markitdown-";
 
 const SCOPE = new URL("./", self.location.href);
@@ -203,5 +203,7 @@ self.addEventListener("fetch", (event) => {
 });
 
 self.addEventListener("message", (event) => {
-  if (event.data === "SKIP_WAITING") self.skipWaiting();
+  if (event.data === "SKIP_WAITING" || (event.data && event.data.type === "SKIP_WAITING")) {
+    self.skipWaiting();
+  }
 });
