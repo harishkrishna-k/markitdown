@@ -163,7 +163,13 @@ const MIME_TYPES = {
 
 function friendlyError(error) {
   const raw = error && error.message ? error.message : String(error);
-  if (/MissingDependencyException|ModuleNotFoundError|No module named/i.test(raw)) {
+  console.error("[markitdown] conversion error:", raw);
+
+  const moduleMatch = raw.match(/No module named ['"]([^'"]+)['"]/);
+  if (moduleMatch) {
+    return `Missing Python module: ${moduleMatch[1]}`;
+  }
+  if (/MissingDependencyException/i.test(raw)) {
     return "This format needs a document parser that is not available in the browser build.";
   }
   if (/UnsupportedFormatException|Unsupported format/i.test(raw)) {
@@ -315,9 +321,20 @@ async function convert({ id, name, type, buffer }) {
 import io
 from markitdown import StreamInfo
 with open(md_input_path, "rb") as handle:
-    stream = io.BytesIO(handle.read())
+    raw_data = handle.read()
 stream_info = StreamInfo(extension=md_extension, filename=md_file_name, mimetype=md_mimetype)
-_markitdown.convert_stream(stream, stream_info=stream_info).text_content
+try:
+    text_content = _markitdown.convert_stream(
+        io.BytesIO(raw_data), stream_info=stream_info
+    ).text_content
+except Exception as conversion_error:
+    if md_extension in (".txt", ".text", ".md", ".markdown"):
+        from js import console
+        console.warn("Plain-text conversion failed in markitdown; decoding directly:", str(conversion_error))
+        text_content = raw_data.decode("utf-8", errors="replace")
+    else:
+        raise
+text_content
 `);
     const text = typeof markdown === "string" ? markdown : String(markdown);
     return {
