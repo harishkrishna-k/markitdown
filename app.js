@@ -366,7 +366,13 @@ async function submitToWorker(record) {
     const buffer = await record.file.arrayBuffer();
     console.debug("[markitdown] posting conversion", record.id, record.name);
     state.worker.postMessage(
-      { type: "convert", id: record.id, name: record.name, type: record.file.type || "", buffer },
+      {
+        type: "convert",
+        id: record.id,
+        name: record.name,
+        mimeType: record.file.type || "",
+        buffer,
+      },
       [buffer],
     );
   } catch (error) {

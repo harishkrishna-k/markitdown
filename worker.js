@@ -7,7 +7,7 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-const WORKER_BUILD = "v5-queue";
+const WORKER_BUILD = "v6-mime-fix";
 
 /* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
 const WASM_PACKAGES = [
@@ -306,9 +306,9 @@ _markitdown = MarkItDown()
   return bootPromise;
 }
 
-async function convert({ id, name, type, buffer }) {
+async function convert({ id, name, mimeType, buffer }) {
   const extension = fileExtension(name);
-  const mime = type || MIME_TYPES[extension] || "application/octet-stream";
+  const mime = mimeType || MIME_TYPES[extension] || "application/octet-stream";
   const inputPath = `/tmp/markitdown-input-${String(id).replace(/[^a-zA-Z0-9_-]/g, "")}.bin`;
 
   pyodide.FS.writeFile(inputPath, new Uint8Array(buffer));
