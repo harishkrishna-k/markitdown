@@ -7,7 +7,7 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-const WORKER_BUILD = "v4-cobble";
+const WORKER_BUILD = "v5-queue";
 
 /* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
 const WASM_PACKAGES = [
@@ -216,7 +216,7 @@ async function installPurePythonPackages() {
   try {
     await pyodide.runPythonAsync(`
 import micropip
-await micropip.install(pip_requirements, deps=False, keep_going=True)
+await micropip.install(pip_requirements, deps=False, keep_going=False)
 `);
   } finally {
     pyodide.globals.delete("pip_requirements");
@@ -282,7 +282,7 @@ async function boot() {
       await installPurePythonPackages();
       await pyodide.runPythonAsync(`
 import importlib
-for module_name in ("markdownify", "pdfminer", "mammoth", "pptx", "openpyxl", "defusedxml", "xlsxwriter"):
+for module_name in ("markdownify", "pdfminer", "mammoth", "cobble", "pptx", "openpyxl", "defusedxml", "xlsxwriter"):
     importlib.import_module(module_name)
 `);
       await installMarkitdownWheel(version);
@@ -357,14 +357,16 @@ text_content
   }
 }
 
-self.onmessage = (event) => {
+self.addEventListener("message", (event) => {
   const message = event.data;
   if (!message || message.type !== "convert") return;
+
+  console.log("[markitdown] received conversion", message.id, message.name);
+  post({ type: "converting", id: message.id });
 
   queue = queue.then(async () => {
     try {
       await boot();
-      post({ type: "converting", id: message.id });
       const result = await convert(message);
       post({ type: "result", ...result });
     } catch (error) {
@@ -376,7 +378,7 @@ self.onmessage = (event) => {
       });
     }
   });
-};
+});
 
 /* Start booting immediately so the status pill reflects real progress. */
 boot().catch(() => {});

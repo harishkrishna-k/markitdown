@@ -59,6 +59,7 @@ let deferredInstallPrompt = null;
 let toastTimer = 0;
 let bootWatchdog = 0;
 let workerRestarts = 0;
+const CONVERSION_TIMEOUT_MS = 180000;
 
 /* ------------------------------ helpers ------------------------------ */
 
@@ -267,7 +268,8 @@ function startWorker() {
 
 function onWorkerMessage(message) {
   if (!message) return;
-  if (message.build) elements.workerBuild.textContent = message.build;
+  if (message.build && elements.workerBuild) elements.workerBuild.textContent = message.build;
+  console.debug("[markitdown] worker message:", message.type, message.id || "");
 
   switch (message.type) {
     case "status":
@@ -297,7 +299,7 @@ function onWorkerMessage(message) {
     }
 
     case "error":
-      updateFile(message.id, { status: "error", error: message.message, file: null });
+      updateFile(message.id, { status: "error", error: message.message });
       if (state.activeId === message.id) renderOutput();
       toast(message.message || "Conversion failed.", true);
       break;
@@ -322,24 +324,63 @@ function onWorkerMessage(message) {
   }
 }
 
+function clearConversionTimer(record) {
+  if (!record || !record.conversionTimer) return;
+  clearTimeout(record.conversionTimer);
+  record.conversionTimer = 0;
+}
+
+function armConversionTimer(record) {
+  clearConversionTimer(record);
+  record.conversionTimer = setTimeout(() => {
+    if (record.status !== "converting") return;
+    updateFile(record.id, {
+      status: "error",
+      error: "Conversion timed out. The worker did not respond; retry or reload the page.",
+    });
+    toast(`${record.name} timed out.`, true);
+  }, CONVERSION_TIMEOUT_MS);
+}
+
 function flushQueue() {
   if (!state.workerReady || state.fatal) return;
   for (const record of state.files) {
-    if (record.status === "queued") submitToWorker(record);
+    if (record.status === "queued") {
+      updateFile(record.id, { status: "converting", submittedAt: Date.now() });
+      submitToWorker(record);
+    }
   }
 }
 
 async function submitToWorker(record) {
+  if (!record.file) {
+    updateFile(record.id, {
+      status: "error",
+      error: "The original file is no longer available. Add it again.",
+    });
+    return;
+  }
+
+  armConversionTimer(record);
   try {
     const buffer = await record.file.arrayBuffer();
+    console.debug("[markitdown] posting conversion", record.id, record.name);
     state.worker.postMessage(
       { type: "convert", id: record.id, name: record.name, type: record.file.type || "", buffer },
       [buffer],
     );
   } catch (error) {
+    clearConversionTimer(record);
     updateFile(record.id, { status: "error", error: error.message || String(error), file: null });
     toast(`Could not read ${record.name}.`, true);
   }
+}
+
+function retryFile(id) {
+  const record = state.files.find((item) => item.id === id);
+  if (!record || !record.file || state.fatal || !state.workerReady) return;
+  updateFile(id, { status: "queued", error: null });
+  flushQueue();
 }
 
 /* ------------------------------ files ------------------------------ */
@@ -379,6 +420,7 @@ function handleFiles(fileList) {
 function updateFile(id, patch) {
   const record = state.files.find((item) => item.id === id);
   if (!record) return;
+  if (patch.status === "done" || patch.status === "error") clearConversionTimer(record);
   Object.assign(record, patch);
   render();
 }
@@ -448,6 +490,19 @@ function renderFileList() {
     button.append(dot, meta);
     button.addEventListener("click", () => setActive(record.id));
     item.appendChild(button);
+
+    if (record.status === "error" && record.file) {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "retry-btn";
+      retry.textContent = "Retry";
+      retry.addEventListener("click", (event) => {
+        event.stopPropagation();
+        retryFile(record.id);
+      });
+      item.appendChild(retry);
+    }
+
     elements.fileList.appendChild(item);
   }
 }

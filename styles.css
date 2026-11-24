@@ -292,6 +292,19 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
   letter-spacing: 0;
 }
 .file-list { list-style: none; margin: 0; padding: 8px; overflow-y: auto; flex: 1; }
+.file-list > li { display: flex; align-items: center; gap: 6px; }
+.file-list > li > .file-item { flex: 1; min-width: 0; }
+.retry-btn {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-2);
+  color: var(--text);
+  font-size: 11px;
+  cursor: pointer;
+}
+.retry-btn:hover { border-color: var(--accent); color: var(--accent); }
 .file-item {
   display: flex;
   align-items: center;
