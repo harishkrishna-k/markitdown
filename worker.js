@@ -7,7 +7,7 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-const WORKER_BUILD = "v6-mime-fix";
+const WORKER_BUILD = "v7-pdf-fallback";
 
 /* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
 const WASM_PACKAGES = [
@@ -19,6 +19,7 @@ const WASM_PACKAGES = [
   "charset-normalizer",
   "cryptography",
   "pillow",
+  "pandas",
   "six",
   "typing-extensions",
   "xlrd",
@@ -127,6 +128,23 @@ _magika_stub.__version__ = "0.0.0+pyodide-stub"
 sys.modules["magika"] = _magika_stub
 `;
 
+/* markitdown's PDF converter imports pdfplumber before it falls back to
+ * pdfminer. pdfplumber needs a native pypdfium2 wheel, which Pyodide cannot
+ * load, so provide a stub whose open() raises and triggers that fallback. */
+const PDFPLUMBER_STUB = String.raw`
+"""Minimal pdfplumber stand-in that forces the pdfminer fallback."""
+import sys
+import types
+
+_pdfplumber_stub = types.ModuleType("pdfplumber")
+
+def _unavailable(*args, **kwargs):
+    raise RuntimeError("pdfplumber is not available in the browser build")
+
+_pdfplumber_stub.open = _unavailable
+sys.modules["pdfplumber"] = _pdfplumber_stub
+`;
+
 let pyodide = null;
 let bootPromise = null;
 let queue = Promise.resolve();
@@ -207,8 +225,9 @@ async function loadWasmPackages() {
   });
 }
 
-function injectMagikaStub() {
+function injectRuntimeStubs() {
   pyodide.runPython(MAGIKA_STUB);
+  pyodide.runPython(PDFPLUMBER_STUB);
 }
 
 async function installPurePythonPackages() {
@@ -278,7 +297,7 @@ async function boot() {
       status("Installing document parsers...");
       const version = await readVersion();
       await loadWasmPackages();
-      injectMagikaStub();
+      injectRuntimeStubs();
       await installPurePythonPackages();
       await pyodide.runPythonAsync(`
 import importlib
