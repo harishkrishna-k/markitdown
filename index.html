@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MarkItDown — documents to LLM-ready Markdown, in your browser</title>
+    <meta
+      name="description"
+      content="Convert PDF, DOCX, PPTX, XLSX, XLS, HTML, CSV, JSON, XML, EPUB and TXT files to Markdown entirely in your browser. No uploads, no servers."
+    />
+    <meta name="theme-color" content="#0b1120" />
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" type="image/svg+xml" href="./icons/icon.svg" />
+    <link rel="apple-touch-icon" href="./icons/icon-192.png" />
+    <link rel="stylesheet" href="./styles.css" />
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="MarkItDown home">
+          <span class="brand-mark" aria-hidden="true">M<span>↓</span></span>
+          <span class="brand-name">MarkItDown</span>
+          <span class="brand-tag">client-side</span>
+        </a>
+
+        <div class="topbar-actions">
+          <div id="status-pill" class="status-pill" role="status" aria-live="polite">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span id="status-text">Booting converter…</span>
+          </div>
+          <span id="offline-badge" class="offline-badge" hidden title="The app and converter are cached for offline use">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 0 0-9 9h2a7 7 0 0 1 14 0h2a9 9 0 0 0-9-9Zm0 4a5 5 0 0 0-5 5h2a3 3 0 0 1 6 0h2a5 5 0 0 0-5-5Zm-1 8 3-4v3h2l-4 5v-3H9l2-1Z"/></svg>
+            Offline ready
+          </span>
+          <button id="theme-toggle" class="icon-button" type="button" aria-label="Switch to light theme" title="Toggle theme">
+            <span id="theme-icon" aria-hidden="true">☾</span>
+          </button>
+          <button id="install-btn" class="install-button" type="button" hidden>Install app</button>
+        </div>
+      </header>
+
+      <main class="main">
+        <section id="dropzone" class="dropzone" tabindex="0" role="button"
+                 aria-label="Drop documents here or press Enter to choose files">
+          <div class="dropzone-inner">
+            <div class="dropzone-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L8 8m4-4 4 4M4 16v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
+            </div>
+            <h1>Drop documents to convert</h1>
+            <p>Files are parsed with Python + markitdown, right here in your browser.</p>
+            <button id="pick-btn" class="primary-button" type="button">Choose files</button>
+            <p class="dropzone-hint">PDF · DOCX · PPTX · XLSX · XLS · HTML · CSV · JSON · XML · EPUB · TXT</p>
+            <p class="dropzone-note">Multiple files are supported. You can drop more while the runtime is starting.</p>
+          </div>
+        </section>
+
+        <section id="workspace" class="workspace" hidden aria-label="Conversion workspace">
+          <aside class="file-panel">
+            <div class="panel-heading">
+              <h2>Queue <span id="file-count" class="count">0</span></h2>
+              <button id="add-more" class="text-button" type="button">+ Add files</button>
+            </div>
+            <ul id="file-list" class="file-list"></ul>
+            <div class="file-panel-footer">
+              <span id="queue-summary">No files yet</span>
+            </div>
+          </aside>
+
+          <div class="output-panel">
+            <div class="output-toolbar">
+              <div class="tabs" role="tablist" aria-label="Output view">
+                <button id="tab-raw" class="tab is-active" type="button" role="tab" aria-selected="true" aria-controls="raw-view">Raw Markdown</button>
+                <button id="tab-preview" class="tab" type="button" role="tab" aria-selected="false" aria-controls="preview-view">Rendered Preview</button>
+              </div>
+              <div class="toolbar-actions">
+                <span id="stats" class="stats" hidden></span>
+                <button id="copy-btn" class="secondary-button" type="button" disabled>Copy Markdown</button>
+                <button id="download-btn" class="secondary-button" type="button" disabled>Download .md</button>
+                <button id="zip-btn" class="secondary-button" type="button" hidden>Download All (.zip)</button>
+              </div>
+            </div>
+
+            <div id="raw-view" class="view raw-view" role="tabpanel" aria-labelledby="tab-raw">
+              <pre><code id="raw-output"></code></pre>
+            </div>
+            <div id="preview-view" class="view preview-view" role="tabpanel" aria-labelledby="tab-preview" hidden>
+              <article id="preview-output" class="markdown-body"></article>
+            </div>
+            <div id="empty-state" class="empty-state">
+              <p>Select a file on the left to see its Markdown.</p>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p class="privacy"><span aria-hidden="true">🔒</span> 100% client-side — your files never leave your browser.</p>
+        <p id="version-line" class="version">
+          markitdown build: <a id="version-sha" href="https://github.com/microsoft/markitdown" target="_blank" rel="noopener noreferrer">checking…</a>
+          <span aria-hidden="true">·</span>
+          synced <span id="version-time">—</span>
+        </p>
+      </footer>
+    </div>
+
+    <div id="toast" class="toast" role="alert" hidden></div>
+    <input id="file-input" type="file" multiple
+           accept=".pdf,.docx,.pptx,.xlsx,.xls,.html,.htm,.csv,.json,.xml,.epub,.txt,application/pdf,text/html,text/csv,application/json,application/xml,text/plain"
+           hidden />
+  </body>
+</html>

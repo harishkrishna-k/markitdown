@@ -1,0 +1,121 @@
+name: Sync upstream markitdown and deploy
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build WASM markitdown wheel
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.decision.outputs.skip }}
+      sha: ${{ steps.decision.outputs.sha }}
+    steps:
+      - name: Checkout app sources
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install build tooling
+        run: python -m pip install --upgrade pip build hatchling tomlkit
+
+      - name: Read latest upstream commit
+        id: upstream
+        run: |
+          set -euo pipefail
+          SHA=$(curl --retry 3 --fail --silent --show-error \
+            -H 'Accept: application/vnd.github+json' \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            https://api.github.com/repos/microsoft/markitdown/commits/main \
+            | python -c 'import json,sys; print(json.load(sys.stdin)["sha"])')
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Read currently deployed commit
+        id: deployed
+        run: |
+          set -uo pipefail
+          DEPLOYED=""
+          for URL in \
+            "https://markitdown.harishkrishna.in/version.json" \
+            "https://harishkrishna-k.github.io/markitdown/version.json"; do
+            CANDIDATE=$(curl --retry 2 --fail --silent --show-error --max-time 15 "$URL" 2>/dev/null \
+              | python -c 'import json,sys; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null || true)
+            if [ -n "$CANDIDATE" ]; then
+              DEPLOYED="$CANDIDATE"
+              break
+            fi
+          done
+          echo "sha=$DEPLOYED" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to build
+        id: decision
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
+          DEPLOYED_SHA: ${{ steps.deployed.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          echo "sha=$UPSTREAM_SHA" >> "$GITHUB_OUTPUT"
+          if [ "$EVENT_NAME" = "schedule" ] && [ "$UPSTREAM_SHA" = "$DEPLOYED_SHA" ]; then
+            echo "Upstream markitdown is unchanged ($UPSTREAM_SHA); skipping build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Building markitdown at $UPSTREAM_SHA (deployed: ${DEPLOYED_SHA:-none})."
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Clone upstream markitdown
+        if: steps.decision.outputs.skip != 'true'
+        run: git clone --depth 1 https://github.com/microsoft/markitdown.git upstream
+
+      - name: Build SHA-stamped WASM wheel
+        if: steps.decision.outputs.skip != 'true'
+        run: python scripts/build_wasm_wheel.py --source upstream --dist dist
+
+      - name: Assemble static site
+        if: steps.decision.outputs.skip != 'true'
+        run: |
+          set -euo pipefail
+          cp index.html styles.css app.js worker.js sw.js manifest.json README.md dist/
+          cp -R icons dist/
+          if [ -f CNAME ]; then cp CNAME dist/; fi
+          ls -R dist
+
+      - name: Configure GitHub Pages
+        if: steps.decision.outputs.skip != 'true'
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        if: steps.decision.outputs.skip != 'true'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    if: needs.build.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy artifact
+        id: deployment
+        uses: actions/deploy-pages@v4
