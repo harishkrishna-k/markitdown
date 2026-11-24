@@ -29,6 +29,7 @@ const PURE_PYTHON_PACKAGES = [
   "markdownify",
   "pdfminer.six",
   "mammoth",
+  "cobble",
   "python-pptx",
   "openpyxl",
   "defusedxml",
