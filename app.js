@@ -35,6 +35,11 @@ const elements = {
   zipBtn: $("zip-btn"),
   statusPill: $("status-pill"),
   statusText: $("status-text"),
+  bootProgress: $("boot-progress"),
+  bootProgressTrack: $("boot-progress-track"),
+  bootProgressFill: $("boot-progress-fill"),
+  bootProgressText: $("boot-progress-text"),
+  bootProgressCount: $("boot-progress-count"),
   offlineBadge: $("offline-badge"),
   themeToggle: $("theme-toggle"),
   themeIcon: $("theme-icon"),
@@ -106,6 +111,27 @@ function setStatus(message, phase = "loading") {
   elements.statusText.textContent = message;
   elements.statusPill.classList.toggle("is-ready", phase === "ready");
   elements.statusPill.classList.toggle("is-error", phase === "error");
+}
+
+function hideBootProgress() {
+  elements.bootProgress.hidden = true;
+}
+
+function updateBootProgress(message) {
+  const progress = message.progress;
+  if (!progress || !progress.total || message.phase === "ready" || message.phase === "error") {
+    hideBootProgress();
+    return;
+  }
+
+  const total = Number(progress.total) || 0;
+  const current = Math.max(0, Math.min(total, Number(progress.current) || 0));
+  elements.bootProgress.hidden = false;
+  elements.bootProgressText.textContent = message.message;
+  elements.bootProgressCount.textContent = `${current}/${total}`;
+  elements.bootProgressFill.style.width = `${total ? (current / total) * 100 : 0}%`;
+  elements.bootProgressTrack.setAttribute("aria-valuenow", String(current));
+  elements.bootProgressTrack.setAttribute("aria-valuemax", String(total));
 }
 
 function loadLibraries() {
@@ -216,6 +242,7 @@ function startWorker() {
   worker.addEventListener("error", (event) => {
     state.fatal = true;
     clearTimeout(bootWatchdog);
+    hideBootProgress();
     setStatus("Converter crashed", "error");
     console.error("Converter worker error:", event.message);
     toast("The converter stopped unexpectedly.", true);
@@ -225,6 +252,7 @@ function startWorker() {
   bootWatchdog = setTimeout(() => {
     if (state.workerReady || state.fatal) return;
     if (workerRestarts >= 1) {
+      hideBootProgress();
       setStatus("Converter is taking too long to start", "error");
       toast("The converter could not start. Reload the page to try again.", true);
       return;
@@ -232,6 +260,7 @@ function startWorker() {
     workerRestarts += 1;
     toast("Restarting the converter…", true);
     worker.terminate();
+    hideBootProgress();
     state.workerReady = false;
     for (const record of state.files) {
       if (record.status === "queued" || record.status === "converting") {
@@ -251,10 +280,12 @@ function onWorkerMessage(message) {
   switch (message.type) {
     case "status":
       setStatus(message.message, message.phase);
+      updateBootProgress(message);
       break;
 
     case "ready":
       clearTimeout(bootWatchdog);
+      hideBootProgress();
       state.workerReady = true;
       setStatus("Ready", "ready");
       flushQueue();
@@ -283,6 +314,7 @@ function onWorkerMessage(message) {
 
     case "fatal":
       clearTimeout(bootWatchdog);
+      hideBootProgress();
       state.fatal = true;
       setStatus("Converter unavailable", "error");
       for (const record of state.files) {

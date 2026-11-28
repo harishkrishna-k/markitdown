@@ -41,6 +41,16 @@
       </header>
 
       <main class="main">
+        <div id="boot-progress" class="boot-progress" hidden>
+          <div id="boot-progress-track" class="boot-progress-track" role="progressbar"
+               aria-label="Converter loading progress" aria-valuemin="0" aria-valuenow="0" aria-valuemax="5">
+            <div id="boot-progress-fill" class="boot-progress-fill"></div>
+          </div>
+          <div class="boot-progress-meta">
+            <span id="boot-progress-text">Preparing the converter…</span>
+            <span id="boot-progress-count">0/5</span>
+          </div>
+        </div>
         <section id="dropzone" class="dropzone" tabindex="0" role="button"
                  aria-label="Drop documents here or press Enter to choose files">
           <div class="dropzone-inner">

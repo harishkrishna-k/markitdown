@@ -216,7 +216,31 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 .secondary-button:not(:disabled):hover { background: var(--border); }
 
 /* ---------- main / dropzone ---------- */
-.main { flex: 1; min-height: 0; display: flex; }
+.main { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+
+.boot-progress { flex: none; margin-bottom: 16px; }
+.boot-progress-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+.boot-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.3s ease;
+}
+.boot-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 7px;
+  color: var(--faint);
+  font-size: 11.5px;
+}
+.boot-progress-count { font-variant-numeric: tabular-nums; color: var(--muted); }
 
 .dropzone {
   flex: 1;

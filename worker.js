@@ -7,7 +7,7 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-const WORKER_BUILD = "v7-pdf-fallback";
+const WORKER_BUILD = "v10-progress";
 
 /* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
 const WASM_PACKAGES = [
@@ -149,12 +149,21 @@ let pyodide = null;
 let bootPromise = null;
 let queue = Promise.resolve();
 
+const BOOT_STEPS = 5;
+let bootStep = 0;
+
 function post(message) {
   self.postMessage({ ...message, build: WORKER_BUILD });
 }
 
-function status(message, phase = "loading") {
-  post({ type: "status", phase, message });
+function status(message, phase = "loading", current = bootStep) {
+  bootStep = current;
+  post({
+    type: "status",
+    phase,
+    message,
+    progress: { current, total: BOOT_STEPS },
+  });
 }
 
 function relativeUrl(path) {
@@ -217,7 +226,6 @@ async function readVersion() {
 
 async function loadWasmPackages() {
   await pyodide.loadPackage(WASM_PACKAGES, {
-    messageCallback: () => status("Loading document support..."),
     errorCallback: (message) => console.warn("[markitdown worker]", message),
   });
 }
@@ -291,11 +299,15 @@ async function boot() {
       importScripts(`${PYODIDE_BASE}pyodide.js`);
       pyodide = await self.loadPyodide({ indexURL: PYODIDE_BASE });
 
-      status("Loading document support...");
+      status("Loading document support...", "loading", 1);
       const version = await readVersion();
       await loadWasmPackages();
+
+      status("Loading document support...", "loading", 2);
       injectRuntimeStubs();
       await installPurePythonPackages();
+
+      status("Finishing setup...", "loading", 3);
       await pyodide.runPythonAsync(`
 import importlib
 for module_name in ("markdownify", "pdfminer", "mammoth", "cobble", "pptx", "openpyxl", "defusedxml", "xlsxwriter"):
@@ -303,13 +315,13 @@ for module_name in ("markdownify", "pdfminer", "mammoth", "cobble", "pptx", "ope
 `);
       await installMarkitdownWheel(version);
 
-      status("Starting the converter...");
+      status("Starting the converter...", "loading", 4);
       pyodide.runPython(`
 from markitdown import MarkItDown, StreamInfo
 _markitdown = MarkItDown()
 `);
 
-      status("Ready", "ready");
+      status("Ready", "ready", 5);
       post({ type: "ready", version });
       return version;
     } catch (error) {
