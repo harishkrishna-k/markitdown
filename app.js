@@ -44,6 +44,7 @@ const elements = {
   themeToggle: $("theme-toggle"),
   themeIcon: $("theme-icon"),
   installBtn: $("install-btn"),
+  updateBtn: $("update-btn"),
   toast: $("toast"),
 };
 
@@ -61,6 +62,8 @@ let deferredInstallPrompt = null;
 let toastTimer = 0;
 let bootWatchdog = 0;
 let workerRestarts = 0;
+let serviceWorkerRegistration = null;
+let deployedWheel = null;
 const CONVERSION_TIMEOUT_MS = 180000;
 
 /* ------------------------------ helpers ------------------------------ */
@@ -177,40 +180,74 @@ async function registerServiceWorker() {
     const script = new URL("./sw.js", import.meta.url).href;
     const scope = new URL("./", import.meta.url).href;
     const registration = await navigator.serviceWorker.register(script, { scope });
+    serviceWorkerRegistration = registration;
+
     const markOfflineReady = () => {
       if (registration.active) elements.offlineBadge.hidden = false;
     };
-    let requestedUpdate = false;
-    let reloading = false;
-    const activateWaitingWorker = () => {
-      if (!registration.waiting) return;
-      requestedUpdate = true;
-      registration.waiting.postMessage({ type: "SKIP_WAITING" });
+    const showUpdateAvailable = () => {
+      if (navigator.serviceWorker.controller) elements.updateBtn.hidden = false;
     };
 
     markOfflineReady();
-    activateWaitingWorker();
+    if (registration.waiting) showUpdateAvailable();
+
     registration.addEventListener("updatefound", () => {
       const installing = registration.installing;
       if (!installing) return;
       installing.addEventListener("statechange", () => {
         if (installing.state === "installed") {
           markOfflineReady();
-          activateWaitingWorker();
+          showUpdateAvailable();
         }
       });
     });
-    navigator.serviceWorker.addEventListener("controllerchange", () => {
-      markOfflineReady();
-      if (requestedUpdate && !reloading) {
-        reloading = true;
-        window.location.reload();
-      }
+    navigator.serviceWorker.addEventListener("controllerchange", markOfflineReady);
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) checkForUpdates();
     });
-    await registration.update();
+    setInterval(checkForUpdates, 5 * 60 * 1000);
+    await checkForUpdates();
   } catch (error) {
     console.warn("Service worker registration failed:", error);
   }
+}
+
+async function checkVersionForUpdates() {
+  try {
+    const response = await fetch(new URL("./version.json", import.meta.url).href, { cache: "no-store" });
+    if (!response.ok) return;
+    const version = await response.json();
+    const wheel = version.wheel || "";
+    if (deployedWheel === null) {
+      deployedWheel = wheel;
+    } else if (wheel !== deployedWheel) {
+      elements.updateBtn.hidden = false;
+    }
+  } catch (_) {
+    /* Offline or malformed metadata must never break the app. */
+  }
+}
+
+async function checkForUpdates() {
+  await Promise.allSettled([
+    serviceWorkerRegistration ? serviceWorkerRegistration.update() : Promise.resolve(),
+    checkVersionForUpdates(),
+  ]);
+}
+
+function setupUpdateButton() {
+  elements.updateBtn.addEventListener("click", () => {
+    elements.updateBtn.hidden = true;
+    const waiting = serviceWorkerRegistration && serviceWorkerRegistration.waiting;
+    if (!waiting) {
+      window.location.reload();
+      return;
+    }
+    navigator.serviceWorker.addEventListener("controllerchange", () => window.location.reload(), { once: true });
+    waiting.postMessage({ type: "SKIP_WAITING" });
+  });
 }
 
 function setupInstallPrompt() {
@@ -682,5 +719,6 @@ setupTheme();
 setupUploads();
 setupControls();
 setupInstallPrompt();
+setupUpdateButton();
 registerServiceWorker();
 startWorker();
