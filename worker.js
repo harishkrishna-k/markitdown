@@ -7,37 +7,35 @@
 
 const PYODIDE_VERSION = "0.27.7";
 const PYODIDE_BASE = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
-const WORKER_BUILD = "v7-pdf-fallback";
+const WORKER_BUILD = "v9-lazy-parsers";
 
-/* Pyodide-provided (WASM) packages. The rest are pure Python wheels. */
-const WASM_PACKAGES = [
+/* Everything markitdown imports at module load. The heavy document parsers
+ * are deliberately excluded; they are installed on demand per file type. */
+const BOOT_WASM_PACKAGES = [
   "micropip",
-  "lxml",
   "beautifulsoup4",
+  "charset-normalizer",
   "requests",
   "certifi",
-  "charset-normalizer",
-  "cryptography",
-  "pillow",
-  "pandas",
-  "six",
-  "typing-extensions",
-  "xlrd",
 ];
 
-/* Installed by micropip with dependency resolution disabled: every transitive
- * dependency is either in WASM_PACKAGES or listed here explicitly. */
-const PURE_PYTHON_PACKAGES = [
+const BOOT_PURE_PACKAGES = [
   "markdownify",
-  "pdfminer.six",
-  "mammoth",
-  "cobble",
-  "python-pptx",
-  "openpyxl",
   "defusedxml",
-  "XlsxWriter",
-  "et-xmlfile",
 ];
+
+/* Format-specific extras. Dependencies are listed explicitly because micropip
+ * runs with dependency resolution disabled. */
+const FORMAT_PACKAGES = {
+  ".pdf": { wasm: ["cryptography"], pure: ["pdfminer.six", "six", "typing-extensions"] },
+  ".docx": { wasm: ["lxml"], pure: ["mammoth", "cobble"] },
+  ".pptx": { wasm: ["lxml", "pillow"], pure: ["python-pptx", "XlsxWriter"] },
+  ".xlsx": { wasm: ["pandas"], pure: ["openpyxl", "et-xmlfile", "XlsxWriter"] },
+  ".xls": { wasm: ["pandas", "xlrd"], pure: [] },
+};
+
+const loadedWasm = new Set();
+const loadedPure = new Set();
 
 const MAGIKA_STUB = String.raw`
 """Minimal, dependency-free magika stand-in for Pyodide.
@@ -215,11 +213,16 @@ async function readVersion() {
   return version;
 }
 
-async function loadWasmPackages() {
-  await pyodide.loadPackage(WASM_PACKAGES, {
-    messageCallback: () => status("Loading document support..."),
-    errorCallback: (message) => console.warn("[markitdown worker]", message),
+async function loadWasmPackages(names, message) {
+  const needed = names.filter((name) => !loadedWasm.has(name));
+  if (!needed.length) return;
+
+  status(message);
+  await pyodide.loadPackage(needed, {
+    messageCallback: () => status(message),
+    errorCallback: (detail) => console.warn("[markitdown worker]", detail),
   });
+  for (const name of needed) loadedWasm.add(name);
 }
 
 function injectRuntimeStubs() {
@@ -227,8 +230,12 @@ function injectRuntimeStubs() {
   pyodide.runPython(PDFPLUMBER_STUB);
 }
 
-async function installPurePythonPackages() {
-  pyodide.globals.set("pip_requirements", PURE_PYTHON_PACKAGES);
+async function installPurePackages(names, message) {
+  const needed = names.filter((name) => !loadedPure.has(name));
+  if (!needed.length) return;
+
+  status(message);
+  pyodide.globals.set("pip_requirements", needed);
   try {
     await pyodide.runPythonAsync(`
 import micropip
@@ -237,6 +244,14 @@ await micropip.install(pip_requirements, deps=False, keep_going=False)
   } finally {
     pyodide.globals.delete("pip_requirements");
   }
+  for (const name of needed) loadedPure.add(name);
+}
+
+async function ensureFormatPackages(extension) {
+  const extras = FORMAT_PACKAGES[extension];
+  if (!extras) return;
+  await loadWasmPackages(extras.wasm, "Loading document support...");
+  await installPurePackages(extras.pure, "Preparing this file...");
 }
 
 async function installMarkitdownWheel(version) {
@@ -288,19 +303,14 @@ async function boot() {
   bootPromise = (async () => {
     try {
       status("Preparing the converter...");
+      const versionPromise = readVersion();
       importScripts(`${PYODIDE_BASE}pyodide.js`);
       pyodide = await self.loadPyodide({ indexURL: PYODIDE_BASE });
 
-      status("Loading document support...");
-      const version = await readVersion();
-      await loadWasmPackages();
+      const version = await versionPromise;
+      await loadWasmPackages(BOOT_WASM_PACKAGES, "Loading document support...");
       injectRuntimeStubs();
-      await installPurePythonPackages();
-      await pyodide.runPythonAsync(`
-import importlib
-for module_name in ("markdownify", "pdfminer", "mammoth", "cobble", "pptx", "openpyxl", "defusedxml", "xlsxwriter"):
-    importlib.import_module(module_name)
-`);
+      await installPurePackages(BOOT_PURE_PACKAGES, "Loading document support...");
       await installMarkitdownWheel(version);
 
       status("Starting the converter...");
@@ -383,6 +393,7 @@ self.addEventListener("message", (event) => {
   queue = queue.then(async () => {
     try {
       await boot();
+      await ensureFormatPackages(fileExtension(message.name));
       const result = await convert(message);
       post({ type: "result", ...result });
     } catch (error) {
