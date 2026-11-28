@@ -25,7 +25,7 @@ PDF · DOCX · PPTX · XLSX · XLS · HTML · CSV · JSON · XML · EPUB · TXT
 2. Drop files onto the page, or choose them from your device.
 3. When the queue finishes, select a file to copy or download its Markdown.
 
-The first visit downloads the core conversion runtime; format-specific parsers are fetched only when you open that kind of file. After that, everything is cached and works offline.
+The first visit downloads the conversion runtime (tens of megabytes). After that, the app is cached and works offline.
 
 ## Privacy
 
