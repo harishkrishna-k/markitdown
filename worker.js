@@ -185,15 +185,14 @@ function friendlyError(error) {
   const raw = error && error.message ? error.message : String(error);
   console.error("[markitdown] conversion error:", raw);
 
-  const moduleMatch = raw.match(/No module named ['"]([^'"]+)['"]/);
-  if (moduleMatch) {
-    return `Missing Python module: ${moduleMatch[1]}`;
+  if (/No module named/.test(raw)) {
+    return "A required conversion component is missing.";
   }
   if (/MissingDependencyException/i.test(raw)) {
-    return "This format needs a document parser that is not available in the browser build.";
+    return "This format needs a parser that is not available in the browser build.";
   }
   if (/UnsupportedFormatException|Unsupported format/i.test(raw)) {
-    return "markitdown does not support this file format.";
+    return "This file format is not supported.";
   }
   if (/magika|onnx/i.test(raw)) {
     return "Format detection failed. Please try a file with a standard extension.";
@@ -201,9 +200,7 @@ function friendlyError(error) {
   if (/JSONDecodeError|SyntaxError/i.test(raw)) {
     return "The file could not be parsed. Check that it is not corrupted.";
   }
-  const lines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
-  const message = lines.length ? lines[lines.length - 1] : raw;
-  return message.length > 360 ? `${message.slice(0, 357)}...` : message;
+  return "Conversion failed. Please check the file and try again.";
 }
 
 async function readVersion() {
@@ -213,14 +210,14 @@ async function readVersion() {
   }
   const version = await response.json();
   if (!version || !version.wheel) {
-    throw new Error("version.json does not declare a markitdown wheel.");
+    throw new Error("version.json does not declare a converter build.");
   }
   return version;
 }
 
 async function loadWasmPackages() {
   await pyodide.loadPackage(WASM_PACKAGES, {
-    messageCallback: (message) => status(message),
+    messageCallback: () => status("Loading document support..."),
     errorCallback: (message) => console.warn("[markitdown worker]", message),
   });
 }
@@ -257,7 +254,7 @@ await micropip.install(markitdown_wheel_url, deps=False)
 `);
     installed = true;
   } catch (error) {
-    status("Unpacking the markitdown wheel...");
+    status("Finishing setup...");
   } finally {
     pyodide.globals.delete("markitdown_wheel_url");
   }
@@ -266,7 +263,7 @@ await micropip.install(markitdown_wheel_url, deps=False)
 
   const response = await fetch(wheelUrl);
   if (!response.ok) {
-    throw new Error(`Could not download the markitdown wheel (HTTP ${response.status}).`);
+    throw new Error(`Could not load the converter (HTTP ${response.status}).`);
   }
   pyodide.FS.writeFile("/tmp/markitdown-wheel.whl", new Uint8Array(await response.arrayBuffer()));
   try {
@@ -290,11 +287,11 @@ async function boot() {
 
   bootPromise = (async () => {
     try {
-      status("Loading Python runtime...");
+      status("Preparing the converter...");
       importScripts(`${PYODIDE_BASE}pyodide.js`);
       pyodide = await self.loadPyodide({ indexURL: PYODIDE_BASE });
 
-      status("Installing document parsers...");
+      status("Loading document support...");
       const version = await readVersion();
       await loadWasmPackages();
       injectRuntimeStubs();
@@ -306,7 +303,7 @@ for module_name in ("markdownify", "pdfminer", "mammoth", "cobble", "pptx", "ope
 `);
       await installMarkitdownWheel(version);
 
-      status("Starting markitdown...");
+      status("Starting the converter...");
       pyodide.runPython(`
 from markitdown import MarkItDown, StreamInfo
 _markitdown = MarkItDown()

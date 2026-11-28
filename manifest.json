@@ -2,7 +2,7 @@
   "id": "./",
   "name": "MarkItDown — Client-Side Document Converter",
   "short_name": "MarkItDown",
-  "description": "Convert documents to LLM-ready Markdown entirely in your browser with Pyodide and Microsoft markitdown.",
+  "description": "Convert documents to LLM-ready Markdown entirely in your browser.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -13,19 +13,13 @@
   "categories": ["productivity", "utilities", "developer"],
   "icons": [
     {
-      "src": "./icons/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any"
-    },
-    {
-      "src": "./icons/icon-192.png",
+      "src": "./icons/md-icon.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "./icons/icon-512.png",
+      "src": "./icons/md-icon.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"

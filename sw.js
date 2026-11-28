@@ -4,7 +4,7 @@
  * - Cache-first for immutable Pyodide / PyPI / wheel assets (instant offline loads).
  */
 
-const CACHE_NAME = "markitdown-app-v7";
+const CACHE_NAME = "markitdown-app-v8";
 const CACHE_PREFIX = "markitdown-";
 
 const SCOPE = new URL("./", self.location.href);
@@ -30,9 +30,7 @@ const PRECACHE_URLS = [
   scoped("app.js"),
   scoped("worker.js"),
   scoped("manifest.json"),
-  scoped("icons/icon.svg"),
-  scoped("icons/icon-192.png"),
-  scoped("icons/icon-512.png"),
+  scoped("icons/md-icon.png"),
   `${PYODIDE_BASE}pyodide.js`,
   `${PYODIDE_BASE}pyodide-lock.json`,
   "https://cdn.jsdelivr.net/npm/marked@15/+esm",

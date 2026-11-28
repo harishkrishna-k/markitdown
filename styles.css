@@ -399,8 +399,6 @@ button:disabled { cursor: not-allowed; opacity: 0.5; }
 }
 .footer p { margin: 0; }
 .privacy { color: var(--muted); }
-.version a { color: var(--accent); text-decoration: none; }
-.version a:hover { text-decoration: underline; }
 
 .toast {
   position: fixed;

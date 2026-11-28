@@ -1,56 +1,39 @@
-# MarkItDown (client-side)
+# MarkItDown
 
-A 100% browser-based document → Markdown converter built on Microsoft's
-[`markitdown`](https://github.com/microsoft/markitdown). Python runs in a
-Pyodide Web Worker, so the UI never blocks and **no file is ever uploaded**.
+Turn documents into clean, LLM-ready Markdown — entirely in your browser.
 
-Supported inputs: PDF, DOCX, PPTX, XLSX, XLS, HTML, CSV, JSON, XML, EPUB, TXT.
+**[Open the app →](https://markitdown.harishkrishna.in/)**
 
-## How it works
+Drop in a document and get readable Markdown back in seconds. No account, no upload, no server: the conversion happens on your device.
 
-- `index.html` / `styles.css` / `app.js` — instant-paint vanilla UI, drag & drop,
-  raw/rendered tabs, copy, per-file `.md` download, batch `.zip`, install prompt.
-- `worker.js` — boots Pyodide from jsDelivr, injects a pure-Python `magika` stub
-  (so the native ONNX runtime is never needed), installs the document parsers,
-  then calls `MarkItDown().convert_stream(...)` with a browser-provided
-  `StreamInfo`.
-- `scripts/build_wasm_wheel.py` — clones upstream `microsoft/markitdown`, strips
-  native-only dependencies from `pyproject.toml`, builds a pure-Python wheel,
-  removes its runtime dependency declarations, and stamps it with the upstream
-  commit SHA in `version.json`.
-- `sw.js` / `manifest.json` — installable PWA; network-first shell + version
-  checks, cache-first Pyodide/PyPI/wheel assets, automatic old-wheel pruning.
-- `.github/workflows/sync-and-deploy.yml` — rebuilds and deploys every 6 hours,
-  on pushes to `main`, and on demand; scheduled runs are skipped when the live
-  site already has the latest upstream commit.
+## Features
 
-## GitHub Pages setup (one time)
+- Converts all the common document formats listed below
+- Handles multiple files at once with a live queue
+- Raw Markdown view and rendered preview
+- Copy to clipboard, download individual `.md` files, or export everything as a ZIP
+- Installable app with offline support after the first visit
+- Light and dark themes
 
-1. Go to **Settings → Pages → Build and deployment**.
-2. Set **Source** to **GitHub Actions**. (Do *not* select "Deploy from a branch".)
-3. Go to **Settings → Pages → Custom domain**, enter
-   `markitdown.harishkrishna.in`, and save. Tick **Enforce HTTPS** once DNS
-   validates.
-4. In your DNS provider for `harishkrishna.in`, add:
+## Supported formats
 
-   | Type  | Name        | Value                     |
-   | ----- | ----------- | ------------------------- |
-   | CNAME | `markitdown` | `harishkrishna-k.github.io` |
+PDF · DOCX · PPTX · XLSX · XLS · HTML · CSV · JSON · XML · EPUB · TXT
 
-5. Push to `main` (or run **Actions → Sync upstream markitdown and deploy →
-   Run workflow**). The `CNAME` file in this repo is copied into the deployment
-   automatically.
-6. If you remove the custom domain later, delete `CNAME` from this repo or the
-   workflow will re-add it to the deployment.
+## How to use
 
-The site will then be live at <https://markitdown.harishkrishna.in/>.
-Without a custom domain it also works at
-<https://harishkrishna-k.github.io/markitdown/>.
+1. Open the app.
+2. Drop files onto the page, or choose them from your device.
+3. When the queue finishes, select a file to copy or download its Markdown.
 
-## Run locally
+The first visit downloads the conversion runtime (tens of megabytes). After that, the app is cached and works offline.
 
-A plain static server is enough, but the wheel and `version.json` must exist
-first:
+## Privacy
+
+Your documents never leave your browser. The only network traffic is for the app itself and its cached conversion components — file contents are never uploaded.
+
+## Development
+
+The site is plain static HTML/CSS/JS; the converter assets are generated at build time. To run locally:
 
 ```bash
 python -m pip install build hatchling tomlkit
@@ -58,29 +41,18 @@ python scripts/build_wasm_wheel.py --dist .
 python -m http.server 8000
 ```
 
-Open <http://localhost:8000/>. `localhost` is a secure context, so the service
-worker and Pyodide work normally. On the first load Pyodide and the Python
-wheels are downloaded (~tens of MB); subsequent loads are served from the
-service worker cache and work offline.
+Then open <http://localhost:8000/>. `localhost` is a secure context, so the installable-app and offline features work normally.
 
-To produce the deployable site manually:
+To assemble a deployable `dist/`:
 
 ```bash
 python scripts/build_wasm_wheel.py --source /path/to/markitdown --dist dist
-cp index.html styles.css app.js worker.js sw.js manifest.json README.md dist/
-cp -R icons dist/ && cp CNAME dist/
+cp index.html styles.css app.js worker.js sw.js manifest.json CNAME dist/
+cp -R icons dist/
 ```
 
-## Customising
+`version.json` and `wheels/` are generated and gitignored. Deployments are handled by `.github/workflows/sync-and-deploy.yml` on pushes to `main`, every six hours, and on demand.
 
-- `PYODIDE_VERSION` in `worker.js` and the CDN URL in `sw.js` must match.
-- CDN versions for `marked`, `DOMPurify`, and `JSZip` live in `app.js` (`CDN`)
-  and in `sw.js` (`PRECACHE_URLS`).
-- Add or remove accepted formats in `ACCEPTED_EXTENSIONS` in `app.js` and in
-  the `accept` attribute of the file input in `index.html`.
+## Credits
 
-## Privacy
-
-Everything runs in your browser. The only network requests are for static app
-assets, the Pyodide runtime, Python wheels from PyPI/jsDelivr, and the small
-`version.json` metadata file. Uploaded document bytes never leave the page.
+Built with the open-source [microsoft/markitdown](https://github.com/microsoft/markitdown) converter.

@@ -39,9 +39,6 @@ const elements = {
   themeToggle: $("theme-toggle"),
   themeIcon: $("theme-icon"),
   installBtn: $("install-btn"),
-  versionSha: $("version-sha"),
-  versionTime: $("version-time"),
-  workerBuild: $("worker-build"),
   toast: $("toast"),
 };
 
@@ -210,26 +207,6 @@ function setupInstallPrompt() {
   });
 }
 
-async function loadVersion() {
-  try {
-    const response = await fetch(new URL("./version.json", import.meta.url).href, { cache: "no-store" });
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const version = await response.json();
-    const sha = version.sha || version.commit || "unknown";
-    const shortSha = version.shortSha || sha.slice(0, 7);
-    elements.versionSha.textContent = shortSha;
-    elements.versionSha.href = `https://github.com/microsoft/markitdown/commit/${sha}`;
-    elements.versionSha.title = sha;
-    elements.versionTime.textContent = version.builtAt
-      ? new Date(version.builtAt).toLocaleString()
-      : "—";
-  } catch (error) {
-    elements.versionSha.textContent = "unavailable";
-    elements.versionSha.removeAttribute("href");
-    console.warn("Could not read version.json:", error);
-  }
-}
-
 function startWorker() {
   const workerUrl = new URL("./worker.js", import.meta.url).href;
   const worker = new Worker(workerUrl);
@@ -240,7 +217,8 @@ function startWorker() {
     state.fatal = true;
     clearTimeout(bootWatchdog);
     setStatus("Converter crashed", "error");
-    toast(event.message || "The Python worker stopped unexpectedly.", true);
+    console.error("Converter worker error:", event.message);
+    toast("The converter stopped unexpectedly.", true);
   });
 
   clearTimeout(bootWatchdog);
@@ -268,7 +246,6 @@ function startWorker() {
 
 function onWorkerMessage(message) {
   if (!message) return;
-  if (message.build && elements.workerBuild) elements.workerBuild.textContent = message.build;
   console.debug("[markitdown] worker message:", message.type, message.id || "");
 
   switch (message.type) {
@@ -548,9 +525,9 @@ async function renderPreview(fileId, markdown) {
     if (state.activeId !== fileId || state.view !== "preview") return;
     const html = marked.parse(markdown, { async: false, gfm: true, breaks: false });
     elements.previewOutput.innerHTML = purify.sanitize(html, { USE_PROFILES: { html: true } });
-  } catch (error) {
+  } catch {
     if (state.activeId === fileId) {
-      toast(`Preview unavailable: ${error.message || error}`, true);
+      toast("Preview unavailable. Please try again.", true);
     }
   }
 }
@@ -612,9 +589,9 @@ async function downloadAll() {
     }
     const blob = await zip.generateAsync({ type: "blob", compression: "DEFLATE" });
     const stamp = new Date().toISOString().slice(0, 10);
-    downloadBlob(blob, `markitdown-${stamp}.zip`);
-  } catch (error) {
-    toast(`Could not build the ZIP: ${error.message || error}`, true);
+    downloadBlob(blob, `converted-documents-${stamp}.zip`);
+  } catch {
+    toast("Could not build the ZIP. Please try again.", true);
   }
 }
 
@@ -674,5 +651,4 @@ setupUploads();
 setupControls();
 setupInstallPrompt();
 registerServiceWorker();
-loadVersion();
 startWorker();
